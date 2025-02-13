@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  Plantilla YAML que crea grupos de seguridad para permitir tráfico SSH, HTTP y puerto 8080.
+
+Resources:
+  SG-SSH:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir tráfico SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  SG-http:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir tráfico HTTP
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  SG-back:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir tráfico 8080
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  GrupoSeguridadSSHID:
+    Description: ID del Grupo de Seguridad para SSH
+    Value: !Ref SG-SSH
+    Export:
+      Name: SSH
+
+  GrupoSeguridadHTTPID:
+    Description: ID del Grupo de Seguridad para la instancia de Frontend
+    Value: !Ref SG-http
+    Export:
+      Name: HTTP
+
+  GrupoSeguridadTomcatID:
+    Description: ID del Grupo de Seguridad para la instancia de Backend
+    Value: !Ref SG-back
+    Export:
+      Name: back

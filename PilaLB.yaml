@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Plantilla YAML que crea una instancia Load Balancer en NGINX para distribuir
+  trafico HTTP entre las instancias Frontend (FE1 y FE2).
+
+Parameters:
+  Subnet:
+    Description: Subred en la que se lanzara la instancia (debe ser publica)
+    Type: AWS::EC2::Subnet::Id
+  KeyName:
+    Description: Nombre de la llave para la instancia
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: vockey
+  AMI:
+    Description: ID de la imagen de la instancia (Ubuntu Jammy)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/jammy/stable/current/amd64/hvm/ebs-gp2/ami-id
+  InstanceType:
+    Description: Tipo de instancia para el Load Balancer
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.nano
+      - t2.large
+
+Resources:
+  SecurityGroupLB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir trafico HTTP y SSH para la instancia Load Balancer
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  LoadBalancerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AMI
+      KeyName: !Ref KeyName
+      SubnetId: !Ref Subnet
+      SecurityGroupIds:
+        - !Ref SecurityGroupLB
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            apt update -y
+            apt install -y nginx
+            # Eliminar configuración por defecto
+            rm -f /etc/nginx/sites-enabled/default
+            cat > /etc/nginx/conf.d/loadbalancer.conf <<EOF
+            upstream frontend_servers {
+                server ${FE1}:80;
+                server ${FE2}:80;
+            }
+
+            server {
+                listen 80;
+                server_name _;
+                
+                location / {
+                    proxy_pass http://frontend_servers;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                }
+            }
+            EOF
+            nginx -t && systemctl restart nginx
+            systemctl enable nginx
+          - { FE1: !ImportValue FE1PublicIP, FE2: !ImportValue FE2PublicIP }
+
+Outputs:
+  LoadBalancerPublicIP:
+    Description: IP publica de la instancia Load Balancer (NGINX)
+    Value: !GetAtt LoadBalancerInstance.PublicIp
+    Export:
+      Name: LoadBalancerPublicIP
